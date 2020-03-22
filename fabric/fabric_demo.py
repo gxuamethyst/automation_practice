@@ -13,8 +13,9 @@ from invoke import UnexpectedExit
 # Your SSH public key, will insert it into the remote host for authentication
 TARGET_SSH_PUBLIC_KEY = "/Users/gxuamethyst/.ssh/id_rsa.pub"
 
+# schema: ip/host, user, password
 TARGET_HOSTS = [
-    # schema: ip/host, user, password
+    # fake data.
     ["192.168.1.2", "root", "f3Fk3sh8Et!c"],
     ["192.168.1.3", "root", "c#3Fk3sdisix"],
     ["192.168.1.4", "root", "sefdSX!]hBfz"]
@@ -43,24 +44,19 @@ def insert_ssh_key_to_host(connection: Connection, ssh_key_file=None):
         print("ssh key {} do not existed.".format(ssh_key_file))
         return -1
 
-    # read ssh key file
-    with open(ssh_key_file, "r") as key_file:
-        ssh_key = key_file.read()
-
-    # check if autoorized_keys file existed on remote host
-    result = remote_run_command(connection, "ls ~/.ssh/authorized_keys")
-    if result is not None:
-        # check if ssh_key already inserted
-        result = remote_run_command(connection, "cat ~/.ssh/authorized_keys")
-        if ssh_key in result.stdout:
-            print("ssh_key have already insert to {}, do nothing.".format(connection.host))
-            return 0
-        remote_run_command(connection, 'echo "' + ssh_key + '" >> ~/.ssh/authorized_keys')
-    else:
-        remote_run_command(connection, "mkdir -p ~/.ssh")
-        remote_run_command(connection, "chmod 0700 ~/.ssh")
-        remote_run_command(connection, 'echo "' + ssh_key + '" >> ~/.ssh/authorized_keys')
-        remote_run_command(connection, "chmod 0600 ~/.ssh/authorized_keys")
+    # use param '-o StrictHostKeyChecking=no' and '-o UserKnownHostsFile=/dev/null',
+    # avoid of '/usr/bin/ssh-copy-id: ERROR: Host key verification failed.'
+    command = "ssh-copy-id -o {} -o {} -i {} {}@{}".format(
+        "StrictHostKeyChecking=no",
+        "UserKnownHostsFile=/dev/null",
+        TARGET_SSH_PUBLIC_KEY,
+        connection.user,
+        connection.host
+    )
+    result = connection.local(command)
+    if result.exited != 0:
+        print(result)
+        return result.exited
 
     return 0
 
